@@ -80,9 +80,9 @@ class MLP(object):
             self.activate = ReLU()
 
         # randn(): Gaussian distribution
-        self.input_W = np.random.randn(size, input_size)    # size * input_size
+        self.input_W = np.random.randn(size + 1, input_size + 1)    # size * input_size
 
-        self.output_W = np.random.randn(output_size, size)     # output_size * size
+        self.output_W = np.random.randn(output_size, size + 1)     # output_size * size
 
 
     def train(self, input, target, rate=0.1, M=0.8):
@@ -95,7 +95,8 @@ class MLP(object):
         if len(target) != self.output_size:
             raise ValueError("target size error, %d != d"
                              % (len(target), self.output_size))
-        self.input = np.array(input)    # change list to np array
+        input = np.array(input)    # change list to np array
+        self.input = np.append(input, 1)
         self.target = np.array(target)
 
         self.output = self.__forward(self.input)
@@ -142,7 +143,7 @@ class MLP(object):
 
     def predict(self, input):
         input = np.array(input)  # change list to np array
-        return self.__forward(input)
+        return self.__forward(np.append(input, 1))
 
 
     def save(self, model, pickle_file=None):
