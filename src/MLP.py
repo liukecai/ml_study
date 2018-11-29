@@ -52,12 +52,13 @@ class Tanh(ActivateFunction):
 
 
 def softmax(input):
-    return np.exp(input) / np.sum(np.exp(input))
+    input = input - np.max(input)
+    exps = np.exp(input)
+    return exps / np.sum(exps)
 
 
 def softmax_cross_entropy_with_logits(logit, label):
-    s = softmax(logit)
-    return -np.sum(label * np.log(s), axis=0)
+    return -np.sum(label * np.log(logit) + (1 - label) * np.log(1 - logit))
 
 
 class MLP(object):
@@ -116,14 +117,15 @@ class MLP(object):
         self.hidden = self.activate.function(hidden)
 
         output = np.dot(self.output_W, self.hidden)
-        output = self.activate.function(output)
 
-        return output
+        return softmax(output)
 
 
     def backward(self, target, rate, M):
         # http://galaxy.agh.edu.pl/~vlsi/AI/backp_t_en/backprop.html
 
+        # loss = -np.sum(label * np.log(softmax(o)))
+        # the loss derivative is: softmax(o) - label
         out_error = target - self.output    # output error, shape is output_size * 1
 
         in_error = np.dot(self.output_W.T, out_error)    # layer 1 errors
@@ -182,8 +184,7 @@ def testMLP():
             count = 0
             for x, y in zip(mnist.validation.images, mnist.validation.labels):
                 # Test model
-                out = mlp.predict(x)
-                pred = softmax(out)  # Apply softmax to logits
+                pred = mlp.predict(x)
                 correct_prediction += 1 if np.argmax(pred) == np.argmax(y) else 0
                 count += 1
             # Calculate accuracy
