@@ -58,7 +58,12 @@ def softmax(input):
 
 
 def softmax_cross_entropy_with_logits(logit, label):
-    return -np.sum(label * np.log(logit) + (1 - label) * np.log(1 - logit))
+    # log(softmax(zi)) = zi - log(sum(exp(zj))) ~= zi - max(z)
+    ls = logit - np.max(logit)
+    ls_1 = (1-logit) - np.max(1-logit)
+
+    # -np.sum(label * np.log(softmax(o)) + (1-label) * np.log(softmax(1-o)))
+    return -np.sum(label * ls + (1 - label) * ls_1)
 
 
 class MLP(object):
@@ -102,8 +107,8 @@ class MLP(object):
         self.input = np.append(input, 1)
         self.target = np.array(target)
 
-        self.output = self.__forward(self.input)
-        loss = softmax_cross_entropy_with_logits(self.output, self.target)
+        self.output, output = self.__forward(self.input)
+        loss = softmax_cross_entropy_with_logits(output, self.target)
         self.backward(self.target, self.rate, M)
 
         self.step += 1
@@ -120,7 +125,7 @@ class MLP(object):
 
         output = np.dot(self.output_W, np.append(self.hidden, 1))
 
-        return softmax(output)
+        return softmax(output), output
 
 
     def backward(self, target, rate, M):
@@ -175,23 +180,27 @@ def testMLP():
 
     mlp = MLP(784, 10, 512, activate_function='sigmoid')
 
+    train_loss = 0
     for step in range(20000):
         batch_x, batch_y = mnist.train.next_batch(1)
-        train_loss = mlp.train(batch_x[0], batch_y[0])
+        train_loss += mlp.train(batch_x[0], batch_y[0])
 
         if step % 200 == 0:
             # Display logs per epoch step
+            if step != 0:
+                train_loss = train_loss / 200
             print("Step:", '%04d' % step, "train_loss={:.9f}".format(train_loss))
             correct_prediction = 0
             count = 0
             for x, y in zip(mnist.validation.images, mnist.validation.labels):
                 # Test model
-                pred = mlp.predict(x)
+                pred, _ = mlp.predict(x)
                 correct_prediction += 1 if np.argmax(pred) == np.argmax(y) else 0
                 count += 1
             # Calculate accuracy
             accuracy = correct_prediction / count
             print("Accuracy: %f" % accuracy)
+            train_loss = 0
 
     print("Optimization Finished!")
 
