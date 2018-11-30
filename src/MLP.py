@@ -82,8 +82,10 @@ class MLP(object):
 
         # randn(): Gaussian distribution
         self.input_W = np.random.randn(size, input_size + 1)    # size * input_size
+        self.input_W[:, -1] = 0
 
         self.output_W = np.random.randn(output_size, size + 1)     # output_size * size
+        self.output_W[:, -1] = 0
 
 
     def train(self, input, target, rate=0.1, M=0.8):
