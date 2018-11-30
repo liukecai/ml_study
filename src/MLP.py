@@ -81,7 +81,7 @@ class MLP(object):
             self.activate = ReLU()
 
         # randn(): Gaussian distribution
-        self.input_W = np.random.randn(size + 1, input_size + 1)    # size * input_size
+        self.input_W = np.random.randn(size, input_size + 1)    # size * input_size
 
         self.output_W = np.random.randn(output_size, size + 1)     # output_size * size
 
@@ -116,7 +116,7 @@ class MLP(object):
         hidden = np.dot(self.input_W, input)
         self.hidden = self.activate.function(hidden)
 
-        output = np.dot(self.output_W, self.hidden)
+        output = np.dot(self.output_W, np.append(self.hidden, 1))
 
         return softmax(output)
 
@@ -131,7 +131,7 @@ class MLP(object):
         in_error = np.dot(self.output_W.T, out_error)    # layer 1 errors
 
         # update input weight
-        input_delta = rate * in_error * self.activate.diff(self.hidden)
+        input_delta = rate * in_error[0:-1] * self.activate.diff(self.hidden)
         input_weight_delta = np.dot(input_delta.reshape(-1, 1), self.input.reshape(1, -1))
 
         # update output weight
