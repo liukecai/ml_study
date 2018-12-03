@@ -212,16 +212,29 @@ def testMLP():
             if step != 0:
                 train_loss = train_loss / 200
             print("Step:", '%04d' % step, "train_loss={:.9f}".format(train_loss))
-            correct_prediction = 0
-            count = 0
+
+            valid_correct_prediction = 0
+            valid_count = 0
             for x, y in zip(mnist.validation.images, mnist.validation.labels):
                 # Test model
                 pred, _ = mlp.predict(x)
-                correct_prediction += 1 if np.argmax(pred) == np.argmax(y) else 0
-                count += 1
+                valid_correct_prediction += 1 if np.argmax(pred) == np.argmax(y) else 0
+                valid_count += 1
             # Calculate accuracy
-            accuracy = correct_prediction / count
-            print("Accuracy: %f" % accuracy)
+            valid_accuracy = valid_correct_prediction / valid_count
+            print("Valid accuracy: %f" % valid_accuracy, end=", ")
+
+            test_correct_prediction = 0
+            test_count = 0
+            for x, y in zip(mnist.test.images, mnist.test.labels):
+                # Test model
+                pred, _ = mlp.predict(x)
+                test_correct_prediction += 1 if np.argmax(pred) == np.argmax(y) else 0
+                test_count += 1
+                # Calculate accuracy
+            test_accuracy = test_correct_prediction / test_count
+            print("test accuracy: %f" % test_accuracy)
+
             train_loss = 0
 
     print("Optimization Finished!")
