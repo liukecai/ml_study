@@ -71,6 +71,7 @@ class MLP(object):
                  input_size,
                  output_size,
                  size=1024,
+                 batch_size=1,
                  activate_function=None):
 
         self.step = 0
@@ -78,6 +79,7 @@ class MLP(object):
         self.input_size = input_size
         self.output_size = output_size
         self.size = size
+        self.batch_size = batch_size
 
         self.activate = Tanh()
         if activate_function == 'sigmoid':
@@ -88,34 +90,51 @@ class MLP(object):
         # randn(): Gaussian distribution
         self.input_W = np.random.randn(size, input_size + 1)    # size * input_size
         self.input_W[:, -1] = 0
+        self.input_weight_delta = np.zeros(self.input_W.shape)
 
         self.output_W = np.random.randn(output_size, size + 1)     # output_size * size
         self.output_W[:, -1] = 0
+        self.output_weight_delta = np.zeros(self.output_W.shape)
 
 
     def train(self, input, target, rate=0.1, M=0.8):
         if self.step == 0:
             self.rate = rate
 
-        if len(input) != self.input_size:
+        if len(input) != self.batch_size:
+            raise ValueError("batch size error, %d != %d"
+                             % (len(input), self.batch_size))
+        if len(input[0]) != self.input_size:
             raise ValueError("input size error, %d != d"
-                             % (len(input), self.input_size))
-        if len(target) != self.output_size:
+                             % (len(input[0]), self.input_size))
+        if len(target[0]) != self.output_size:
             raise ValueError("target size error, %d != d"
-                             % (len(target), self.output_size))
-        input = np.array(input)    # change list to np array
-        self.input = np.append(input, 1)
+                             % (len(target[0]), self.output_size))
+        self.input = input
         self.target = np.array(target)
 
-        self.output, output = self.__forward(self.input)
-        loss = softmax_cross_entropy_with_logits(output, self.target)
-        self.backward(self.target, self.rate, M)
+
+        self.input_weight_delta[:] = 0
+        self.output_weight_delta[:] = 0
+        self.train_loss = 0
+        for input_0, target_0 in zip(self.input, self.target):
+            input_0 = np.append(np.array(input_0), 1)
+            output_with_softmax, output_without_softmax = self.__forward(input_0)
+            loss = softmax_cross_entropy_with_logits(output_without_softmax, self.target)
+            i, o = self.backward(input_0, output_with_softmax, target_0, M)
+            self.train_loss += loss
+            self.input_weight_delta += i
+            self.output_weight_delta += o
+        self.train_loss = self.train_loss / self.batch_size
+        self.update(self.rate,
+                    self.input_weight_delta / self.batch_size,
+                    self.output_weight_delta / self.batch_size)
 
         self.step += 1
         if self.step % 500 == 0:
             self.rate = self.rate * 0.9
 
-        return loss
+        return self.train_loss
 
 
     def __forward(self, input):
@@ -128,26 +147,29 @@ class MLP(object):
         return softmax(output), output
 
 
-    def backward(self, target, rate, M):
+    def backward(self, input, output, target, M):
         # http://galaxy.agh.edu.pl/~vlsi/AI/backp_t_en/backprop.html
 
-        out_error = target - self.output    # output error, shape is output_size * 1
+        out_error = target - output    # output error, shape is output_size * 1
 
         in_error = np.dot(self.output_W.T, out_error)    # layer 1 errors
 
         # update input weight
-        input_delta = rate * in_error[0:-1] * self.activate.diff(self.hidden)
-        input_weight_delta = np.dot(input_delta.reshape(-1, 1), self.input.reshape(1, -1))
+        input_delta = in_error[0:-1] * self.activate.diff(self.hidden)
+        input_weight_delta = np.dot(input_delta.reshape(-1, 1), input.reshape(1, -1))
 
         # update output weight
         # loss = -np.sum(label * np.log(softmax(o)))
         # the loss derivative is: softmax(o) - label
-        output_delta = rate * out_error * (-out_error)
-        output_weight_delta = np.dot(self.output.reshape(1, -1), output_delta.reshape(-1, 1))
+        output_delta = out_error * (-out_error)
+        output_weight_delta = np.dot(output.reshape(1, -1), output_delta.reshape(-1, 1))
 
-        self.input_W = self.input_W + input_weight_delta
+        return (input_weight_delta, output_weight_delta)
 
-        self.output_W = self.output_W + output_weight_delta
+
+    def update(self, rate, input_weight_delta, output_weight_delta):
+        self.input_W = self.input_W + rate * input_weight_delta
+        self.output_W = self.output_W + rate * output_weight_delta
 
 
     def predict(self, input):
@@ -177,13 +199,13 @@ class MLP(object):
 def testMLP():
     from tensorflow.examples.tutorials.mnist import input_data
     mnist = input_data.read_data_sets("/tmp/data/", one_hot=True)
-
-    mlp = MLP(784, 10, 512, activate_function='sigmoid')
+    batch_size = 64
+    mlp = MLP(784, 10, 512, batch_size, activate_function='relu')
 
     train_loss = 0
     for step in range(20000):
-        batch_x, batch_y = mnist.train.next_batch(1)
-        train_loss += mlp.train(batch_x[0], batch_y[0])
+        batch_x, batch_y = mnist.train.next_batch(batch_size, shuffle=True)
+        train_loss += mlp.train(batch_x, batch_y)
 
         if step % 200 == 0:
             # Display logs per epoch step
