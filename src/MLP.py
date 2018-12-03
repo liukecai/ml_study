@@ -131,8 +131,6 @@ class MLP(object):
     def backward(self, target, rate, M):
         # http://galaxy.agh.edu.pl/~vlsi/AI/backp_t_en/backprop.html
 
-        # loss = -np.sum(label * np.log(softmax(o)))
-        # the loss derivative is: softmax(o) - label
         out_error = target - self.output    # output error, shape is output_size * 1
 
         in_error = np.dot(self.output_W.T, out_error)    # layer 1 errors
@@ -142,7 +140,9 @@ class MLP(object):
         input_weight_delta = np.dot(input_delta.reshape(-1, 1), self.input.reshape(1, -1))
 
         # update output weight
-        output_delta = rate * out_error * self.activate.diff(self.output)
+        # loss = -np.sum(label * np.log(softmax(o)))
+        # the loss derivative is: softmax(o) - label
+        output_delta = rate * out_error * (-out_error)
         output_weight_delta = np.dot(self.output.reshape(1, -1), output_delta.reshape(-1, 1))
 
         self.input_W = self.input_W + input_weight_delta
