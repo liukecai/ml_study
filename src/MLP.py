@@ -199,7 +199,7 @@ class MLP(object):
 def testMLP():
     from tensorflow.examples.tutorials.mnist import input_data
     mnist = input_data.read_data_sets("/tmp/data/", one_hot=True)
-    batch_size = 64
+    batch_size = 32
     mlp = MLP(784, 10, 512, batch_size, activate_function='relu')
 
     train_loss = 0
