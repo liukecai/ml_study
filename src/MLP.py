@@ -72,6 +72,7 @@ class MLP(object):
                  output_size,
                  size=1024,
                  batch_size=1,
+                 learn_rate=0.1,
                  activate_function=None):
 
         self.step = 0
@@ -80,6 +81,7 @@ class MLP(object):
         self.output_size = output_size
         self.size = size
         self.batch_size = batch_size
+        self.rate = learn_rate
 
         self.activate = Tanh()
         if activate_function == 'sigmoid':
@@ -97,10 +99,7 @@ class MLP(object):
         self.output_weight_delta = np.zeros(self.output_W.shape)
 
 
-    def train(self, input, target, rate=0.1, M=0.8):
-        if self.step == 0:
-            self.rate = rate
-
+    def train(self, input, target):
         if len(input) != self.batch_size:
             raise ValueError("batch size error, %d != %d"
                              % (len(input), self.batch_size))
@@ -121,7 +120,7 @@ class MLP(object):
             input_0 = np.append(np.array(input_0), 1)
             output_with_softmax, output_without_softmax = self.__forward(input_0)
             loss = softmax_cross_entropy_with_logits(output_without_softmax, self.target)
-            i, o = self.backward(input_0, output_with_softmax, target_0, M)
+            i, o = self.__backward(input_0, output_with_softmax, target_0)
             self.train_loss += loss
             self.input_weight_delta += i
             self.output_weight_delta += o
@@ -147,7 +146,7 @@ class MLP(object):
         return softmax(output), output
 
 
-    def backward(self, input, output, target, M):
+    def __backward(self, input, output, target):
         # http://galaxy.agh.edu.pl/~vlsi/AI/backp_t_en/backprop.html
 
         out_error = target - output    # output error, shape is output_size * 1
