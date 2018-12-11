@@ -1,6 +1,7 @@
 import abc  # Abstract and Interface module
 import numpy as np
 import pickle
+import os
 
 class ActivateFunction(metaclass=abc.ABCMeta):
     def __init__(self):
@@ -194,16 +195,59 @@ class MLP(object):
         else:
             return pickle.load(open(pickle_file, mode="rb"))
 
+def read_mnist_data():
+    data_root = "/tmp/data/notmnist"
+    pickle_file = os.path.join(data_root, 'notMNIST.pickle')
+    with open(pickle_file, 'rb') as f:
+        data = pickle.load(f)
+        train_dataset = data['train_dataset']
+        train_labels = data['train_labels']
+        valid_dataset = data['valid_dataset']
+        valid_labels = data['valid_labels']
+        test_dataset = data['test_dataset']
+        test_labels = data['test_labels']
+        del data  # hint to help gc free up memory
+        print('Training set', train_dataset.shape, train_labels.shape)
+        print('Validation set', valid_dataset.shape, valid_labels.shape)
+        print('Test set', test_dataset.shape, test_labels.shape)
+    return (train_dataset, train_labels, valid_dataset, valid_labels, test_dataset, test_labels)
+
+
+def train_next_batch(mnist, batch_size, cursor):
+    batch_x = mnist[0][cursor:cursor+batch_size,:]
+    batch_y = mnist[1][cursor:cursor+batch_size]
+    batch_x = batch_x.reshape(batch_size, -1)
+    batch_y = (np.arange(10)==batch_y[:,None]).astype(np.integer)
+    return batch_x, batch_y
+
+
+def valid_or_test_next_batch(mnist):
+    batch_x = mnist[0].reshape(len(mnist[0]), -1)
+    batch_y = mnist[1]
+    batch_y = (np.arange(10)==batch_y[:,None]).astype(np.integer)
+    return (batch_x, batch_y)
+
 
 def testMLP():
-    from tensorflow.examples.tutorials.mnist import input_data
-    mnist = input_data.read_data_sets("/tmp/data/", one_hot=True)
+    image_size = 28
+    num_labels = 10
     batch_size = 32
-    mlp = MLP(784, 10, 512, batch_size, activate_function='relu')
 
+    mnist = read_mnist_data()
+    mlp = MLP(image_size * image_size, num_labels, 512, batch_size, activate_function='relu')
+
+    valid_data = valid_or_test_next_batch((mnist[2], mnist[3]))
+    test_data = valid_or_test_next_batch((mnist[4], mnist[5]))
+
+    train_length = len(mnist[0])
     train_loss = 0
+    train_cursor = 0
     for step in range(20000):
-        batch_x, batch_y = mnist.train.next_batch(batch_size, shuffle=True)
+        batch_x, batch_y = train_next_batch((mnist[0], mnist[1]), batch_size, train_cursor)
+        train_cursor += batch_size
+        if train_cursor >= train_length:
+            train_cursor -= train_length
+
         train_loss += mlp.train(batch_x, batch_y)
 
         if step % 200 == 0:
@@ -214,7 +258,7 @@ def testMLP():
 
             valid_correct_prediction = 0
             valid_count = 0
-            for x, y in zip(mnist.validation.images, mnist.validation.labels):
+            for x, y in zip(valid_data[0], valid_data[1]):
                 # Test model
                 pred, _ = mlp.predict(x)
                 valid_correct_prediction += 1 if np.argmax(pred) == np.argmax(y) else 0
@@ -225,7 +269,7 @@ def testMLP():
 
             test_correct_prediction = 0
             test_count = 0
-            for x, y in zip(mnist.test.images, mnist.test.labels):
+            for x, y in zip(test_data[0], test_data[1]):
                 # Test model
                 pred, _ = mlp.predict(x)
                 test_correct_prediction += 1 if np.argmax(pred) == np.argmax(y) else 0
