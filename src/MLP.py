@@ -125,7 +125,7 @@ class MLP(object):
             self.input_weight_delta += i
             self.output_weight_delta += o
         self.train_loss = self.train_loss / self.batch_size
-        self.update(self.rate,
+        self.__update(self.rate,
                     self.input_weight_delta / self.batch_size,
                     self.output_weight_delta / self.batch_size)
 
@@ -166,7 +166,7 @@ class MLP(object):
         return (input_weight_delta, output_weight_delta)
 
 
-    def update(self, rate, input_weight_delta, output_weight_delta):
+    def __update(self, rate, input_weight_delta, output_weight_delta):
         self.input_W = self.input_W + rate * input_weight_delta
         self.output_W = self.output_W + rate * output_weight_delta
 
