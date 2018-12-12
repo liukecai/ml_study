@@ -120,6 +120,8 @@ class MLP(object):
         for input_0, target_0 in zip(self.input, self.target):
             input_0 = np.append(np.array(input_0), 1)
             output_with_softmax, output_without_softmax = self.__forward(input_0)
+            # self.output_with_softmax = output_with_softmax
+            # self.output_without_softmax = output_without_softmax
             loss = softmax_cross_entropy_with_logits(output_without_softmax, self.target)
             i, o = self.__backward(input_0, output_with_softmax, target_0)
             self.train_loss += loss
@@ -131,8 +133,10 @@ class MLP(object):
                     self.output_weight_delta / self.batch_size)
 
         self.step += 1
-        if self.step % 500 == 0:
-            self.rate = self.rate * 0.9
+        if self.step % 400 == 0:
+            self.rate = self.rate * 0.5
+        # if self.rate > 0.0001:
+        #     self.rate = self.rate - 0.000004
 
         return self.train_loss
 
@@ -152,17 +156,21 @@ class MLP(object):
 
         out_error = target - output    # output error, shape is output_size * 1
 
-        in_error = np.dot(self.output_W.T, out_error)    # layer 1 errors
-
-        # update input weight
-        input_delta = in_error[0:-1] * self.activate.diff(self.hidden)
-        input_weight_delta = np.dot(input_delta.reshape(-1, 1), input.reshape(1, -1))
+        # in_error = np.dot(self.output_W.T, out_error)    # layer 1 errors
 
         # update output weight
         # loss = -np.sum(label * np.log(softmax(o)))
         # the loss derivative is: softmax(o) - label
         output_delta = out_error * (-out_error)
-        output_weight_delta = np.dot(output.reshape(1, -1), output_delta.reshape(-1, 1))
+        output_weight_delta = np.dot(output_delta.reshape(-1, 1), np.append(self.hidden, 1).reshape(1, -1))
+        # output_weight_delta = np.dot(output.reshape(1, -1), output_delta.reshape(-1, 1))
+
+        in_error = np.dot(self.output_W.T, output_delta)
+        # in_error = np.dot(self.output_W.T, out_error)
+
+        # update input weight
+        input_delta = in_error[0:-1] * self.activate.diff(self.hidden)
+        input_weight_delta = np.dot(input_delta.reshape(-1, 1), input.reshape(1, -1))
 
         return (input_weight_delta, output_weight_delta)
 
@@ -175,6 +183,25 @@ class MLP(object):
     def predict(self, input):
         input = np.array(input)  # change list to np array
         return self.__forward(np.append(input, 1))
+
+
+    def print_parameter(self):
+        np.set_printoptions(threshold='nan')
+        f = open(str(self.step)+'mlp.txt', mode="w", encoding='UTF-8')
+        f.write("input weight\n")
+        np.savetxt(f, self.input_W)
+        f.write('\n')
+        f.write("output weight\n")
+        np.savetxt(f, self.output_W)
+        f.write('\n\n')
+        f.write("hidden\n")
+        np.savetxt(f, self.hidden)
+        f.write("output with softmax\n")
+        np.savetxt(f, self.output_with_softmax)
+        f.write("\n")
+        f.write("output\n")
+        np.savetxt(f, self.output_without_softmax)
+        f.close()
 
 
     def save(self, model, pickle_file=None):
@@ -249,12 +276,13 @@ def testMLP():
             train_cursor -= train_length
 
         train_loss += mlp.train(batch_x, batch_y)
+        # mlp.print_parameter()
 
         if step % 200 == 0:
             # Display logs per epoch step
             if step != 0:
                 train_loss = train_loss / 200
-            print("Step:", '%04d' % step, "train_loss={:.9f}".format(train_loss))
+            print("Step:", '%04d, ' % step, "learning_rate:", "%.9f, " % mlp.rate, "train_loss={:.9f}".format(train_loss))
 
             valid_correct_prediction = 0
             valid_count = 0
