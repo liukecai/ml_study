@@ -2,6 +2,7 @@ import abc  # Abstract and Interface module
 import numpy as np
 import pickle
 import os
+import random
 
 class ActivateFunction(metaclass=abc.ABCMeta):
     def __init__(self):
@@ -74,6 +75,8 @@ class MLP(object):
                  size=1024,
                  batch_size=1,
                  learn_rate=0.1,
+                 dropout_input=0,
+                 dropout_hidden=0,
                  activate_function=None):
 
         self.step = 0
@@ -83,6 +86,16 @@ class MLP(object):
         self.size = size
         self.batch_size = batch_size
         self.rate = learn_rate
+
+        if dropout_input == 0 and dropout_hidden == 0:
+            self.dropout = False
+        else:
+            self.dropout = True
+            self.dropout_input = dropout_input
+            self.dropout_hidden = dropout_hidden
+
+        self.dropout_size_i = int(self.input_size * dropout_input)
+        self.dropout_size_h = int(self.size * dropout_hidden)
 
         self.activate = Tanh()
         if activate_function == 'sigmoid':
@@ -98,6 +111,9 @@ class MLP(object):
         self.output_W = np.random.randn(output_size, size + 1)     # output_size * size
         self.output_W[:, -1] = 0
         self.output_weight_delta = np.zeros(self.output_W.shape)
+
+        self.dropout_vec_i = np.ones(self.input_size + 1, dtype=int)
+        self.dropout_vec_h = np.ones(self.size + 1, dtype=int)
 
 
     def train(self, input, target):
@@ -118,6 +134,16 @@ class MLP(object):
         self.output_weight_delta[:] = 0
         self.train_loss = 0
         for input_0, target_0 in zip(self.input, self.target):
+
+            if self.dropout:
+                # Dropout
+                dropout_vec_i = [int(1) if random.random() > self.dropout_input else int(0) for _ in range(self.input_size)]
+                dropout_vec_i.append(int(1))
+                self.dropout_vec_i = np.array(dropout_vec_i)
+                dropout_vec_h = [int(1) if random.random() > self.dropout_hidden else int(0) for _ in range(self.size)]
+                dropout_vec_h.append(int(1))
+                self.dropout_vec_h = np.array(dropout_vec_h)
+
             input_0 = np.append(np.array(input_0), 1)
             output_with_softmax, output_without_softmax = self.__forward(input_0)
             # self.output_with_softmax = output_with_softmax
@@ -143,10 +169,10 @@ class MLP(object):
 
     def __forward(self, input):
         # input layer's output become hidden1
-        hidden = np.dot(self.input_W, input)
+        hidden = np.dot(self.input_W, input * self.dropout_vec_i)
         self.hidden = self.activate.function(hidden)
 
-        output = np.dot(self.output_W, np.append(self.hidden, 1))
+        output = np.dot(self.output_W, np.append(self.hidden, 1) * self.dropout_vec_h)
 
         return softmax(output), output
 
@@ -156,14 +182,15 @@ class MLP(object):
 
         out_error = target - output    # output error, shape is output_size * 1
 
-        # in_error = np.dot(self.output_W.T, out_error)    # layer 1 errors
 
         # update output weight
         # loss = -np.sum(label * np.log(softmax(o)))
         # the loss derivative is: softmax(o) - label
         output_delta = out_error * (-out_error)
+
         output_weight_delta = np.dot(output_delta.reshape(-1, 1), np.append(self.hidden, 1).reshape(1, -1))
         # output_weight_delta = np.dot(output.reshape(1, -1), output_delta.reshape(-1, 1))
+        output_weight_delta = output_weight_delta * self.dropout_vec_h
 
         in_error = np.dot(self.output_W.T, output_delta)
         # in_error = np.dot(self.output_W.T, out_error)
@@ -171,6 +198,7 @@ class MLP(object):
         # update input weight
         input_delta = in_error[0:-1] * self.activate.diff(self.hidden)
         input_weight_delta = np.dot(input_delta.reshape(-1, 1), input.reshape(1, -1))
+        input_weight_delta = input_weight_delta * self.dropout_vec_i
 
         return (input_weight_delta, output_weight_delta)
 
