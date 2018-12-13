@@ -75,8 +75,8 @@ class MLP(object):
                  size=1024,
                  batch_size=1,
                  learn_rate=0.1,
-                 dropout_input=0,
-                 dropout_hidden=0,
+                 dropout_input=0.0,
+                 dropout_hidden=0.0,
                  activate_function=None):
 
         self.step = 0
@@ -94,9 +94,6 @@ class MLP(object):
             self.dropout_input = dropout_input
             self.dropout_hidden = dropout_hidden
 
-        self.dropout_size_i = int(self.input_size * dropout_input)
-        self.dropout_size_h = int(self.size * dropout_hidden)
-
         self.activate = Tanh()
         if activate_function == 'sigmoid':
             self.activate = Sigmoid()
@@ -105,10 +102,13 @@ class MLP(object):
 
         # randn(): Gaussian distribution
         self.input_W = np.random.randn(size, input_size + 1)    # size * input_size
+        # random_sample(): uniform distribution
+        # self.input_W = np.random.random_sample((size, input_size + 1))    # size * input_size
         self.input_W[:, -1] = 0
         self.input_weight_delta = np.zeros(self.input_W.shape)
 
         self.output_W = np.random.randn(output_size, size + 1)     # output_size * size
+        # self.output_W = np.random.random_sample((output_size, size + 1))     # output_size * size
         self.output_W[:, -1] = 0
         self.output_weight_delta = np.zeros(self.output_W.shape)
 
@@ -146,8 +146,6 @@ class MLP(object):
 
             input_0 = np.append(np.array(input_0), 1)
             output_with_softmax, output_without_softmax = self.__forward(input_0)
-            # self.output_with_softmax = output_with_softmax
-            # self.output_without_softmax = output_without_softmax
             loss = softmax_cross_entropy_with_logits(output_without_softmax, self.target)
             i, o = self.__backward(input_0, output_with_softmax, target_0)
             self.train_loss += loss
@@ -159,10 +157,8 @@ class MLP(object):
                     self.output_weight_delta / self.batch_size)
 
         self.step += 1
-        if self.step % 400 == 0:
-            self.rate = self.rate * 0.5
-        # if self.rate > 0.0001:
-        #     self.rate = self.rate - 0.000004
+        if self.step % 800 == 0:
+            self.rate = self.rate * 0.6
 
         return self.train_loss
 
@@ -187,18 +183,16 @@ class MLP(object):
         # loss = -np.sum(label * np.log(softmax(o)))
         # the loss derivative is: softmax(o) - label
         output_delta = out_error * (-out_error)
+        hidden_tmp = np.append(self.hidden, 1) * self.dropout_vec_h
+        output_weight_delta = np.dot(output_delta.reshape(-1, 1), hidden_tmp.reshape(1, -1))
 
-        output_weight_delta = np.dot(output_delta.reshape(-1, 1), np.append(self.hidden, 1).reshape(1, -1))
-        # output_weight_delta = np.dot(output.reshape(1, -1), output_delta.reshape(-1, 1))
-        output_weight_delta = output_weight_delta * self.dropout_vec_h
-
-        in_error = np.dot(self.output_W.T, output_delta)
-        # in_error = np.dot(self.output_W.T, out_error)
+        # in_error = np.dot(self.output_W.T, output_delta)
+        in_error = np.dot(self.output_W.T, out_error)
 
         # update input weight
         input_delta = in_error[0:-1] * self.activate.diff(self.hidden)
-        input_weight_delta = np.dot(input_delta.reshape(-1, 1), input.reshape(1, -1))
-        input_weight_delta = input_weight_delta * self.dropout_vec_i
+        input_tmp = input * self.dropout_vec_i
+        input_weight_delta = np.dot(input_delta.reshape(-1, 1), input_tmp.reshape(1, -1))
 
         return (input_weight_delta, output_weight_delta)
 
@@ -269,8 +263,13 @@ def read_mnist_data():
 
 
 def train_next_batch(mnist, batch_size, cursor):
-    batch_x = mnist[0][cursor:cursor+batch_size,:]
-    batch_y = mnist[1][cursor:cursor+batch_size]
+    batch_x = np.zeros((batch_size, mnist[0].shape[1], mnist[0].shape[2]))
+    batch_y = np.zeros(batch_size)
+    if len(cursor) < batch_size:
+        cursor.extend(range(batch_size - len(cursor)))
+    for i in range(batch_size):
+        batch_x[i] = mnist[0][cursor.pop(),:]
+        batch_y[i] = mnist[1][cursor.pop()]
     batch_x = batch_x.reshape(batch_size, -1)
     batch_y = (np.arange(10)==batch_y[:,None]).astype(np.integer)
     return batch_x, batch_y
@@ -289,19 +288,31 @@ def testMLP():
     batch_size = 32
 
     mnist = read_mnist_data()
-    mlp = MLP(image_size * image_size, num_labels, 512, batch_size, activate_function='relu')
+    mlp = MLP(image_size * image_size,
+              num_labels,
+              512,
+              batch_size,
+              learn_rate=0.01,
+              dropout_input=0.8,
+              dropout_hidden=0.5,
+              activate_function='relu')
 
     valid_data = valid_or_test_next_batch((mnist[2], mnist[3]))
     test_data = valid_or_test_next_batch((mnist[4], mnist[5]))
 
     train_length = len(mnist[0])
     train_loss = 0
-    train_cursor = 0
-    for step in range(20000):
+    train_cursor = [x for x in range(train_length)]
+    random.shuffle(train_cursor)
+    epoch = 0
+    for step in range(10 * train_length):
         batch_x, batch_y = train_next_batch((mnist[0], mnist[1]), batch_size, train_cursor)
-        train_cursor += batch_size
-        if train_cursor >= train_length:
-            train_cursor -= train_length
+
+        if len(train_cursor) <= 0:
+            epoch += 1
+            print("Epoch %d finish\n" % epoch)
+            train_cursor = [x for x in range(train_length)]
+            random.shuffle(train_cursor)
 
         train_loss += mlp.train(batch_x, batch_y)
         # mlp.print_parameter()
@@ -326,6 +337,49 @@ def testMLP():
             test_correct_prediction = 0
             test_count = 0
             for x, y in zip(test_data[0], test_data[1]):
+                # Test model
+                pred, _ = mlp.predict(x)
+                test_correct_prediction += 1 if np.argmax(pred) == np.argmax(y) else 0
+                test_count += 1
+                # Calculate accuracy
+            test_accuracy = test_correct_prediction / test_count
+            print("test accuracy: %f" % test_accuracy)
+
+            train_loss = 0
+
+    print("Optimization Finished!")
+
+def testMLP_tf():
+    from tensorflow.examples.tutorials.mnist import input_data
+    mnist = input_data.read_data_sets("/tmp/data/", one_hot=True)
+    batch_size = 32
+    mlp = MLP(784, 10, 512, batch_size, learn_rate=0.01, dropout_input=0.8, dropout_hidden=0.5, activate_function='relu')
+
+    train_loss = 0
+    for step in range(20000):
+        batch_x, batch_y = mnist.train.next_batch(batch_size, shuffle=True)
+        train_loss += mlp.train(batch_x, batch_y)
+
+        if step % 200 == 0:
+            # Display logs per epoch step
+            if step != 0:
+                train_loss = train_loss / 200
+            print("Step:", '%04d, ' % step, "learning_rate:", "%.9f, " % mlp.rate, "train_loss={:.9f}".format(train_loss))
+
+            valid_correct_prediction = 0
+            valid_count = 0
+            for x, y in zip(mnist.validation.images, mnist.validation.labels):
+                # Test model
+                pred, _ = mlp.predict(x)
+                valid_correct_prediction += 1 if np.argmax(pred) == np.argmax(y) else 0
+                valid_count += 1
+            # Calculate accuracy
+            valid_accuracy = valid_correct_prediction / valid_count
+            print("Valid accuracy: %f" % valid_accuracy, end=", ")
+
+            test_correct_prediction = 0
+            test_count = 0
+            for x, y in zip(mnist.test.images, mnist.test.labels):
                 # Test model
                 pred, _ = mlp.predict(x)
                 test_correct_prediction += 1 if np.argmax(pred) == np.argmax(y) else 0
