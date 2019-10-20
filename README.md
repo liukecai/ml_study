@@ -5,3 +5,5 @@ Study machine learning algorithm
         numpy
         tensorflow
         python 3
+        
+        pre_train_dataset require scipy==1.1.0 and pillow
