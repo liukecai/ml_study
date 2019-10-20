@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 class Logistic(object):
     def __init__(self, feature_size, train_data,
                  train_label, test_data, test_label,
+                 batch_size=32,
                  learn_rate=0.002,
                  learn_rate_decay=1,
                  reg_rate=0,
@@ -24,6 +25,8 @@ class Logistic(object):
         self.learn_rate = learn_rate
         self.learn_rate_decay = learn_rate_decay
         self.reg_rate = reg_rate
+
+        self.batch_size = batch_size
 
         self.its = its
         self.step = step
@@ -63,6 +66,9 @@ class Logistic(object):
         loss = 0
 
         for it in range(self.its):
+            weight_inc = 0
+            bais_inc = 0
+
             if it % self.step == 0:
                 acc = self.test()
                 print("Train its: %d, loss: %f, acc: %f, learn_rate: %.10f" % (it, loss/self.step, acc, self.learn_rate))
@@ -72,7 +78,15 @@ class Logistic(object):
             if it != 0 and it % 2000 == 0 and self.learn_rate > 1e-10:
                 self.learn_rate *= self.learn_rate_decay
 
-            loss += self._train(*self.get_sample())
+            for bs in range(self.batch_size):
+                _loss, _weight_inc, _bais_inc = self._train(*self.get_sample())
+
+                loss += _loss
+                weight_inc += _weight_inc
+                bais_inc += _bais_inc
+
+            loss = loss / self.batch_size
+            self.__update(weight_inc/self.batch_size, bais_inc/self.batch_size)
 
 
     def _train(self, x, y):
@@ -94,10 +108,12 @@ class Logistic(object):
         weight_inc = (y_ - y) * x
         bias_inc = (y_ - y)
 
+        return loss, weight_inc, bias_inc
+
+
+    def __update(self, weight_inc, bias_inc):
         self.weight = self.weight - self.learn_rate * weight_inc - self.reg_rate * 2 * np.sum(self.weight)
         self.bias = self.bias - self.learn_rate * bias_inc - self.reg_rate * 1
-
-        return loss
 
 
     def test(self):
@@ -150,7 +166,7 @@ def load_data():
 def main():
     train_data, train_label, test_data, test_label = load_data()
     model = Logistic(train_data.shape[1], train_data, train_label, test_data, test_label,
-                     learn_rate=5e-7, learn_rate_decay=0.8, reg_rate=1e-5, its=1000000000, step=100, plot=True)
+                     learn_rate=5e-7, learn_rate_decay=0.4, reg_rate=1e-6, its=1000000000, step=100, plot=True)
     model.train()
 
 
